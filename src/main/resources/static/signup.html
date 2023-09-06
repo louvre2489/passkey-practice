@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8">
+    <title>WebAuthn 登録</title>
+    <link rel="stylesheet" href="css/bundle.css"/>
+  </head>
+  <body translate="no">
+    <div class="login-page">
+      <div class="form">
+        <input type="text" placeholder="ユーザ名" value="技評 太郎" id="displayName"/>
+        <input type="test" placeholder="Eメール" id="email" value="webauthn@gihyo.jp"/>
+        <button type="button" onclick="registerAsync()">
+          登録
+        </button>
+      </div>
+    </div>
+    <script src="js/webauthn.js"></script>
+  </body>
+</html>
