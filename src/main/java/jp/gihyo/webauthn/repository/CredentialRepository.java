@@ -2,9 +2,9 @@ package jp.gihyo.webauthn.repository;
 
 import jp.gihyo.webauthn.entity.Credential;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
-import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
 import org.springframework.stereotype.Repository;
 
@@ -33,5 +33,9 @@ public class CredentialRepository {
       new MapSqlParameterSource().addValue("userId", userId),
       new BeanPropertyRowMapper<>(Credential.class)
     );
+  }
+
+  public void insert(Credential credential) {
+    insertCredential.execute(new BeanPropertySqlParameterSource(credential));
   }
 }

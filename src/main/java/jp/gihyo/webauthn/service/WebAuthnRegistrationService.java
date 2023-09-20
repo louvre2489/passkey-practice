@@ -1,19 +1,25 @@
 package jp.gihyo.webauthn.service;
 
+import com.webauthn4j.authenticator.AuthenticatorImpl;
+import com.webauthn4j.converter.util.CborConverter;
 import com.webauthn4j.data.*;
 import com.webauthn4j.data.attestation.statement.COSEAlgorithmIdentifier;
+import com.webauthn4j.data.client.Origin;
+import com.webauthn4j.data.client.challenge.Challenge;
 import com.webauthn4j.data.client.challenge.DefaultChallenge;
 import com.webauthn4j.data.extension.client.AuthenticationExtensionsClientInputs;
 import com.webauthn4j.data.extension.client.RegistrationExtensionClientInput;
 import com.webauthn4j.data.extension.client.SupportedExtensionsExtensionClientInput;
+import com.webauthn4j.server.ServerProperty;
+import com.webauthn4j.validator.WebAuthnRegistrationContextValidator;
+import jp.gihyo.webauthn.entity.Credential;
 import jp.gihyo.webauthn.entity.User;
 import jp.gihyo.webauthn.repository.CredentialRepository;
 import jp.gihyo.webauthn.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
+import java.security.SecureRandom;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -108,5 +114,102 @@ public class WebAuthnRegistrationService {
       attestation,
       extensions
     );
+  }
+
+  public User findOrElseCreate(String email, String displayName) {
+    return userRepository.find(email)
+      .orElseGet(() -> createUser(email, displayName));
+  }
+
+  private User createUser(String email, String displayName) {
+
+    var userId = new byte[32];
+    new SecureRandom().nextBytes(userId);
+
+    var user = new User();
+    user.setId(userId);
+    user.setEmail(email);
+    user.setDisplayName(displayName);
+
+    return user;
+  }
+
+  public void creationFinish(
+    User user,
+    Challenge challenge,
+    byte[] clientJSON,
+    byte[] attestationObject) {
+
+    // originの検証 - 中間者攻撃耐性
+    var origin = Origin.create("http://localhost:8000");
+
+    // rpIdHashの検証 - 中間者攻撃耐性
+    var rpId = "localhost";
+
+    // challengeの検証 - リプレイ攻撃耐性
+    var challengeBase64 = new DefaultChallenge(Base64.getEncoder().encode(challenge.getValue()));
+
+    byte[] tokenBindingId = null;
+
+    var serverProperty = new ServerProperty(
+      origin,
+      rpId,
+      challengeBase64,
+      tokenBindingId);
+
+    // flagsの検証 - ユーザーの検証（他要素認証）
+    var userVerificationRequired = true;
+
+    var registrationContext = new WebAuthnRegistrationContext(
+      clientJSON,
+      attestationObject,
+      serverProperty,
+      userVerificationRequired);
+
+    var validator =
+      WebAuthnRegistrationContextValidator.createNonStrictRegistrationContextValidator();
+
+    // clientDataJSONの検証
+    // attestationObjectの検証
+    var response = validator.validate(registrationContext);
+
+    // DBに保存する公開鍵クレデンシャルを取得
+    var credentialId = response
+        .getAttestationObject()
+        .getAuthenticatorData()
+        .getAttestedCredentialData()
+        .getCredentialId();
+
+    // DBに保存する公開鍵クレデンシャルにアテステーションも含める
+    var authenticator = new AuthenticatorImpl(
+        response.getAttestationObject().getAuthenticatorData().getAttestedCredentialData(),
+        response.getAttestationObject().getAttestationStatement(),
+        response.getAttestationObject().getAuthenticatorData().getSignCount(),
+        Set.of(),
+        response.getRegistrationExtensionsClientOutputs(),
+        Map.of());
+
+    var signatureCounter = response
+        .getAttestationObject()
+        .getAuthenticatorData()
+        .getSignCount();
+
+    // ユーザ作成
+    if (userRepository.find(user.getEmail()).isEmpty()) {
+      userRepository.insert(user);
+    }
+
+    // 公開鍵クレデンシャルを保存用にバイナリ化
+    //   ※サンプルコードでは、DBに保存する公開鍵クレデンシャルにアテステーションも含める
+    var authenticatorBin = new CborConverter().writeValueAsBytes(authenticator);
+
+    // 公開鍵クレデンシャルの保存
+    var credential = new Credential();
+    credential.setCredentialId(credentialId);
+    credential.setUserId(user.getId());
+    credential.setPublicKey(authenticatorBin);
+    credential.setSignatureCounter(signatureCounter);
+
+    credentialRepository.insert(credential);
   }
 }

@@ -3,6 +3,7 @@ package jp.gihyo.webauthn.repository;
 import jp.gihyo.webauthn.entity.User;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
 import org.springframework.jdbc.core.simple.SimpleJdbcInsert;
@@ -36,5 +37,9 @@ public class UserRepository {
     } catch (EmptyResultDataAccessException ignore) {
       return Optional.empty();
     }
+  }
+
+  public void insert(User user) {
+    insertUser.execute(new BeanPropertySqlParameterSource(user));
   }
 }
